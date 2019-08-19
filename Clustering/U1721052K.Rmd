@@ -1,0 +1,507 @@
+---
+title: "Cx4073 : Assignment 3"
+author: "Arkar Min"
+date: "U1721052K"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+### Finding Market Segments in Online Retail
+
+Import the CSV data file `assign1_RetailData.csv` for analysis, and quickly check the structure of the data.
+
+```{r}
+retailData <- read.csv("assign3_RetailData.csv", header = TRUE)
+str(retailData)
+```
+
+The following table summarizes the variables in the dataset. Note the type carefully, and convert if required.
+
+| Variable | Description | Remarks | 
+| -------- | ------------------- | ------------------------------------------ |
+| InvoiceNo | The serial number on the Invoice | May be different for same product and same customer. |
+| StockCode | Product (item) code in the Store | Uniquely assigned to every distinct Product (item). |
+| Description | Product (item) name in the Store | May be different for the same StockCode. Do check. |
+| Quantity | Product Quantity in the Transaction | Will of course change with different transactions. |
+| InvoiceDate | Date-Time of the Transaction | Can you use this too? Try, but it is strictly optional. |
+| UnitPrice | Product Price per Unit (in Dollars) | Should be the same for the same Product. Do check. |
+| CustomerID | Customer code in the Store | Same customer may make various purchases. Check carefully. |
+| Country | Country of Residence of Customer | Should be the same for each individual Customer. |
+
+Hint : Think of creating a Customer-Product matrix before you start your market segmentation. First step is deciding the elements in the matrix, and the second step if to choose the notion of distance that whould be appropriate for this case. See if you can effectively use the variables like `Quantity`, `UnitPrice`, `InvoiceDate` and `Country` in this market segmentation. Don't forget to interpret the market segments that you get!
+
+---
+
+##Basic Data Exploration
+
+```{r}
+dim(retailData)
+names(retailData)
+```
+
+There are 541,909 records with 8 columns in the data. Exploration will be started by looking at the summary of all data and first 5 rows of data and last 5 rows of data.
+
+```{r}
+summary(retailData)
+head(retailData)
+tail(retailData)
+```
+
+InvoiceNo describes the unique transaction that the customer made. So, invoice number "573585" appears more than 1000 times means that one customer buy more than 1000 products in one transaction.  
+
+```{r}
+summary(retailData[which(retailData$InvoiceNo == 573585, arr.ind=TRUE),])
+```
+
+Interestingly, transactions are made by customer whose customerID is NA. So, there are NA values in customerID.
+
+```{r}
+nlevels(retailData$StockCode)
+nlevels(retailData$Description)
+```
+
+There are total unique 4070 stock codes and 4224 descriptions. So, there can be cases that more than one description is used for the same stock code. 
+
+```{r}
+x <- retailData$Description[which(retailData$StockCode == '84879', arr.ind = TRUE)]
+summary(x)
+```
+
+According to above example, they do have different description for same product. Another interesting fact is like you can see some weired descriptions like "?", "???damages", "?lost" and so on.
+
+```{r}
+sum(retailData$Quantity <= 0)
+```
+
+Min and Max quantity value is too large. There are 10,624 values which are less than zero in the data. It does not make sense to have negative value or zero value in the quantity in transaction data.
+
+InvoiceDate will not be used. So, there will be no exploration.
+
+```{r}
+sum(retailData$UnitPrice <= 0)
+```
+
+There are 2517 objects with unit price less than or equal to zero. Once again, it does not make sense have those kind of values in unit price.
+
+```{r}
+which(retailData$UnitPrice < 0, arr.ind=TRUE)
+retailData[299984,]
+which(retailData$UnitPrice == 38970, arr.ind=TRUE)
+retailData[222682,]
+```
+
+Data which has highest value and lowest values are checked. Both are very weired data. Likely to be error data.
+
+```{r}
+sum(is.na(retailData$CustomerID)) #135080
+
+summary(retailData$InvoiceNo[which(retailData$CustomerID == 17850, arr.ind = TRUE)]) 
+```
+
+There are 135080 NA values in customer ID. Customer ID should not be continuous variable. It should be categorical variable since each customer has unique number. Same customer can make a lot of purchases. For example, customer ID 17850 makes 35 transactions in the store.
+
+```{r}
+summary(retailData$Country)
+```
+
+There are 38 different countries. Most of the customers are from United Kingdom. Second and Third are from neighbour countries of UK, which is Germany and France.
+
+Let see whether the same product can have different price or not.
+
+```{r}
+head(retailData$UnitPrice[which(retailData$StockCode == '85123A', arr.ind = TRUE)],30)
+retailData[1,]
+retailData[365,]
+retailData[10770,]
+
+head(retailData$UnitPrice[which(retailData$StockCode == '22423', arr.ind = TRUE)],30)
+retailData[881,]
+retailData[937,] 
+retailData[5864,]
+retailData[6902,]
+```
+
+The answer is yes. They can have different price. Cannot figure out exactly how pricing works. Even though, customers from the same country bought the same item, they have to pay different price.
+
+There is one interesting discovery here. If the customer ID is NA, the price is much higher than normal price. This can be the sign of corruption or maybe customer who are registered with the shop get much much lower price than those who are not registered.
+
+This is the end of data exploration.
+
+##Data Cleansing
+
+Firstly, CustomerID will be changed into categorical data.
+
+```{r}
+retailData$CustomerID <- as.factor(retailData$CustomerID)
+```
+
+According to Initial Data Analysis, those rows with CustomerID NA are assumed to be errors. So, all the rows which has NA values inside will be removed. 
+
+```{r}
+retailData <- na.omit(retailData)
+```
+
+Since it does not make sense to have zero or negative value in quantity, those values will be removed.
+
+```{r}
+retailData <- retailData[!(retailData$Quantity <= 0),]
+```
+
+And also, it does not make sense to have zero or negative value in price, so those values will be removed.
+
+```{r}
+retailData <- retailData[!(retailData$UnitPrice <= 0),]
+```
+
+In the summary, the gap between 3rd Quadrant and maximum is too wide. So here for analysis, it is decided to remove all those data which has quantity greater than 3rd quadrant value. This is because large quantity values influecning the clustering is not desired here. And also, the main goal of this market segmentation is to find the general pattern, not to find which a small portion of customers bought the large amount. So, all those records having Quantity higher than 12 are removed.
+
+```{r}
+retailData <- retailData[!(retailData$Quantity > 12),] 
+```
+
+This is the summary of data after Data Cleansing.
+
+```{r}
+summary(retailData)
+```
+
+##Market Segmentation
+
+Firstly, market segmentation will be done on the customers from two countries, Germany and France. This is because they have second and third most customer-based after UK.
+
+Then, market segmentation will be done the whole sale data.
+
+##Segmentation on Customers from France
+
+Segmentation will be done on France first.
+
+```{r}
+France <- subset(retailData, Country == "France")
+summary(France)
+```
+
+We have 6561 total sale records for France. Customer-Product matrix for France will be created first. Row will be the customerID, column will be StockCode and  Quantiy will be the value of the matrix.
+
+```{r}
+Francematrix <- xtabs(Quantity ~ CustomerID + StockCode, data = France)
+Francematrix <- Francematrix[rowSums(Francematrix)>0,]
+Francematrix <- Francematrix[,colSums(Francematrix) > 0]
+library(Matrix)
+Francematrix <- Matrix(Francematrix, sparse = TRUE) 
+str(Francematrix)
+```
+
+A very large matrix is created with 4372 rows and 4070 columns. So, all the rows and columns which has sum of zero are removed since they don't of any information. This reduces the dimension of the matrix to become 86x1329. This can be interpreted as 86 unique customers from France bought products from 1329 categories.
+
+K-means will be used as an algorithm for clustering. Distance will be Euclidean distance since we are comparing the distance between various quantity vector. Based on the within varience and between varience, the number of clusters to be done is decided.
+
+```{r}
+kMin <- 1
+kMax <- 20
+withinSS <- double(kMax - kMin + 1)
+betweenSS <- double(kMax - kMin + 1)
+
+for (K in kMin:kMax) {
+  kMeansFit <- kmeans(Francematrix, centers = K, nstart = 20)
+  withinSS[K] <- sum(kMeansFit$withinss)
+  betweenSS[K] <- kMeansFit$betweenss
+}
+plot(kMin:kMax, withinSS, pch=19, type="b", col="red",
+     xlab = "Value of K", ylab = "Sum of Squares (Within and Between)")
+points(kMin:kMax, betweenSS, pch=19, type="b", col="green")
+```
+
+Based on the plot, it seems like having 3 clusters has a good trade-off between within varience and between varience.
+
+```{r}
+set.seed(20)
+K <- 3
+kMeansFit <- kmeans(Francematrix, centers = K, nstart = 20)
+kMeansFit$withinss
+```
+
+Let analyse each cluster.
+
+```{r}
+clustLabels <- kMeansFit$cluster
+kMeansClust1 = France[clustLabels == 1,]
+kMeansClust2 = France[clustLabels == 2,]
+kMeansClust3 = France[clustLabels == 3,]
+```
+
+For each level, those levels which has zero value will be dropped to get the easier analysis of unique customers.
+
+```{r}
+kMeansClust1 <- droplevels(kMeansClust1)
+kMeansClust2 <- droplevels(kMeansClust2)
+kMeansClust3 <- droplevels(kMeansClust3)
+```
+
+###Clusters Analysis 
+```{r}
+summary(kMeansClust1)
+nlevels(kMeansClust1$CustomerID)
+nlevels(kMeansClust1$StockCode)
+```
+
+So, there are 41 unique customers which bought 131 unique products in this cluster. Total 152 records are inside the cluster. This is smallest cluster.
+
+```{r}
+summary(kMeansClust2)
+nlevels(kMeansClust2$CustomerID)
+nlevels(kMeansClust2$StockCode)
+```
+
+So, there are 80 unique customers which bought 413 unique products in this cluster. Total 688 records are inside the cluster. 
+
+```{r}
+summary(kMeansClust3)
+nlevels(kMeansClust3$CustomerID)
+nlevels(kMeansClust3$StockCode)
+```
+
+There are 86 unique customers which bought 1255 unique products in this cluster. 
+Total 5721 records are inside the cluster. So, basically, all the customers are in this cluster. This also means that all the customers from this country similar purchasing pattern.
+
+Let check the top ten products of each cluster. Here, we will assume that top-ten products are those which appears most in customrs' purchase regardless of the quantity.
+
+```{r}
+summary(kMeansClust1$Description,11)
+summary(kMeansClust2$Description,11)
+summary(kMeansClust3$Description,11)
+```
+
+POSTAGE appears in every clusters. So, it is like a common thing that everyone needs to buy.
+
+For the first cluster, 4 out of 10 products are related to cups and mugs and they also don't appear in the top ten products of other clusters. So, there is a small portion of customers from
+France who are interested in cups and mugs.
+
+For the second cluster, those products are similar to what a married women who has children buy. Lunch box, cultery, cakestand highlight that. Howeverm Second cluster is really similar to the third cluster.
+
+For the third cluster, there are three types of plasters, two types of round snack boxes, three types of lunch box related products and one type of cases. This cluster also highlights the most products from customers of France.
+
+##Segmentation on Customers from Germany
+
+Customer-Product matrix will be created first. Same process as the France will be done.
+
+```{r}
+Nazi <- subset(retailData, Country == "Germany")
+Nazimatrix <- xtabs(Quantity ~ CustomerID + StockCode, data = Nazi)
+Nazimatrix <- Nazimatrix[rowSums(Nazimatrix) > 0,]
+Nazimatrix <- Nazimatrix[,colSums(Nazimatrix) > 0]
+library(Matrix)
+Nazimatrix <- Matrix(Nazimatrix, sparse = TRUE) 
+str(Nazimatrix)
+```
+
+There are 94 unqiue Germany customers who bought 1408 unqiue kinds of products.
+
+EM clustering will used as clustering method. Distance is still Euclidean distance.
+
+```{r}
+library(mclust)
+emFit <- Mclust(Nazimatrix)
+summary(emFit)
+```
+
+Interestingly, only one cluster is created. Apparently, all the customers have similar purchasing pattern.
+
+Hierarchical clustering will be done on this data again to check whether it will give different results.
+
+```{r}
+hiercFit <- hclust(dist(Nazimatrix, method = "euclidean"),
+                   method="ward.D")                         
+hiercFit
+plot(hiercFit, main="Minimum Variance", xlab="", ylab="", sub="", cex =.5)
+```
+
+Distance is Eclidean distance and clustering method is Ward's minimum varience.
+
+Based on the plot, it is good to split the cluster into two.
+
+```{r}
+cutree(hiercFit, k = 2)
+clustLabels <- cutree(hiercFit, k = 2)
+
+hiercClust1 = Nazi [clustLabels == 1,]
+hiercClust2 = Nazi[clustLabels == 2,]
+
+hiercClust1 <- droplevels(hiercClust1)
+hiercClust2 <- droplevels(hiercClust2)
+```
+
+###Clusters Analysis 
+```{r}
+summary(hiercClust1)
+nlevels(hiercClust1$CustomerID)
+nlevels(hiercClust1$StockCode)
+```
+
+So, there are 94 unique customers which bought 1184 unique products in this cluster. Total 4586 records are inside the cluster. This is smallest cluster. This cluster includes all the customers from Germany. So, we can say that customers from Germany have similar purchasing pattern.
+
+```{r}
+summary(hiercClust2)
+nlevels(hiercClust2$CustomerID)
+nlevels(hiercClust2$StockCode)
+```
+
+So, there are 91 unique customers which bought 912 unique products in this cluster. Total 2485 records are inside the cluster. 
+
+```{r}
+summary(hiercClust1$Description,11)
+summary(hiercClust2$Description,11)
+```
+
+Top ten products of two clusters are similar to each other.
+
+In both clusters, we can find three types of clusters, two types of round snack boxes set, one cake related product, one ribbon rustic charm, one type of jumbo bag. The only diffrence is one group has LED product and the other group has lunch box related product.
+
+##Segmentation on the Whole Data
+
+Clustering will be done on the whole data. Customer-Product matrix will be created first.
+
+```{r}
+retailmatrix <- xtabs(Quantity ~ CustomerID + StockCode, data = retailData, sparse = TRUE)
+str(retailmatrix)
+```
+
+EM clustering will be used and distance is Euclidean distance.
+
+```{r}
+library(mclust)
+emFit <- Mclust(retailData) 
+clustLabels <- emFit$classification
+summary(emFit)
+```
+
+9 different clusters are made.
+
+```{r}
+emClust1 = retailData[clustLabels == 1,]
+emClust2 = retailData[clustLabels == 2,]
+emClust3 = retailData[clustLabels == 3,]
+emClust4 = retailData[clustLabels == 4,]
+emClust5 = retailData[clustLabels == 5,]
+emClust6 = retailData[clustLabels == 6,]
+emClust7 = retailData[clustLabels == 7,]
+emClust8 = retailData[clustLabels == 8,]
+emClust9 = retailData[clustLabels == 9,]
+
+emClust1 <- droplevels(emClust1)
+emClust2 <- droplevels(emClust2)
+emClust3 <- droplevels(emClust3)
+emClust4 <- droplevels(emClust4)
+emClust5 <- droplevels(emClust5)
+emClust6 <- droplevels(emClust6)
+emClust7 <- droplevels(emClust7)
+emClust8 <- droplevels(emClust8)
+emClust9 <- droplevels(emClust9)
+```
+
+###Clusters Analysis 
+
+Top-ten products which appears most in each cluster will be analysed.
+
+```{r}
+summary(emClust1,11)
+nlevels(emClust1$CustomerID)
+nlevels(emClust1$StockCode)
+```
+
+There are 384 unique customers which bought 1445 unique products in this cluster. Total 10724 records are inside the cluster. This group includes mostly people from other countries except UK. Plasters and Lunchboxes are most bought products in this clusters. We have seen that in Germany and France, plasters and lunchboxes are most bought products.
+
+Apparently, this cluster represents the shopping pattern of people from other countries except UK.
+
+```{r}
+summary(emClust2,11)
+nlevels(emClust2$CustomerID)
+nlevels(emClust2$StockCode)
+```
+
+There are 2250 unique customers which bought 2383 unique products in this cluster. Total 33961 records are inside the cluster. Most of the customers in this cluster are from UK. In this cluster, there are two types of wood funitures, 2 types of baking product, three kinds of doormat, and two type of building block word.
+
+```{r}
+summary(emClust3,11)
+nlevels(emClust3$CustomerID)
+nlevels(emClust3$StockCode)
+```
+
+There are 2537 unique customers which bought 2604 unique products in this cluster. Total 49889 records are inside the cluster. There are three types of hot water bottle and many kinds of baking products. This cluster is composed of mostly cutstomers from UK. 
+
+This group represents one of the group of customers from UK. 
+
+```{r}
+summary(emClust4,11)
+nlevels(emClust4$CustomerID)
+nlevels(emClust4$StockCode)
+```
+
+There are 383 unique customers which bought 1330 unique products in this cluster. Total 13469 records are inside the cluster. This group is also another group representing customers from other countries except UK. In this cluster, there are various kinds of bag products and two types of round snack boxes set.
+
+```{r}
+summary(emClust5,11)
+nlevels(emClust5$CustomerID)
+nlevels(emClust5$StockCode)
+```
+
+There are 342 unique customers which bought 603 unique products in this cluster. Total 1990 records are inside the cluster. This group is also another group in which most the customers are from other countries except UK. Most of the products in this cluster are funiture related products.
+
+```{r}
+summary(emClust6,11)
+nlevels(emClust6$CustomerID)
+nlevels(emClust6$StockCode)
+```
+
+There are 296 unique customers which bought 1105 unique products in this cluster. Total 5270 records are inside the cluster. This group is also another group representing customers from other countries except UK.  Most of the products in this cluster are kitchen related products.
+
+```{r}
+summary(emClust7,11)
+nlevels(emClust7$CustomerID)
+nlevels(emClust7$StockCode)
+```
+
+There are 2786 unique customers which bought 3013 unique products in this cluster. Total 110700 records are inside the cluster. This is the largest cluster. This cluster inludes mostly customers from UK. There are seven kinds of bag including "REX CASH+CARRY JUMBO SHOPPER" and three types of fancy accessories in this cluster.
+
+```{r}
+summary(emClust8,10)
+nlevels(emClust8$CustomerID)
+nlevels(emClust8$StockCode)
+```
+
+There are 2739 unique customers which bought 3006 unique products in this cluster. Total 105881 records are inside the cluster. This is the second largest cluster. In fact, a lot of products in this clusters are similar to the previous cluster. This group also mostly includes customers from UK.
+
+This cluster 7 and 8 should be combined to become one big cluster.
+
+```{r}
+summary(emClust9,10)
+nlevels(emClust9$CustomerID)
+nlevels(emClust9$StockCode)
+```
+
+There are 40 unique customers which bought 25 unique products in this cluster. Total 76 records are inside the cluster. This is the smallest among 9 clusters. Customers in this cluster bought the product in very small amount because maximum number of product bought in this cluster is 3. Most of the products in this cluster are related to funiture.
+
+This group has mixed group of customers.
+
+###Final Conclusion on the clustering of whole data
+
+Among 9 clusters, there are 4 clusters which represents the shopping pattern of customers from other countries except UK.
+
+Various kinds of plasters, lunchboxes, round snack boxes sets, bag products, kitchen-related products, and funiture-related products are popular among those people.
+
+There are 4 clusters which represents the shopping pattern of customers from UK.
+
+Various kinds of bags, hot water bottles, doormats, baking products, wood funitures, fancy accessories, and building block word are popular among those people.
+
+There is 1 cluster which represents small portion of customers. This group buy small amount of furniture related products.
+
+So, in order to improve Sale, the shop should consider bringing in variety of products related to the above categories.
+

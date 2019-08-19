@@ -1,0 +1,257 @@
+---
+title: "Cx4073 : Assignment 1"
+author: "Arkar Min"
+date: "U1721052K"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+## Analysis of Energy Efficiency
+
+Import the CSV data file `assign1_EnergyData.csv` for analysis, and quickly check the structure of the data.
+
+```{r}
+energyData <- read.csv("assign1_EnergyData.csv", header = TRUE)
+str(energyData)
+```
+## Exploratory Data Analysis
+```{r}
+dim(energyData)
+names(energyData)
+head(energyData)
+tail(energyData)
+summary(energyData)
+```
+
+There are altogether 700 rows in the csv file with 10 columns.
+
+The first and last 5 values of RoofArea, Height, Orientation, GlazingArea and GAreaDist have some repeated same value. So, they are more likely to be category.
+
+```{r}
+hist(energyData$Compactness,col = 'lightgreen') #numeric
+```
+
+In the histogram of Compactness, there is a small gap between 0.9 and 0.95(apporximate). 
+There is a chance that data beyond 0.9 are outliers.
+```{r}
+hist(energyData$SurfaceArea,col = 'lightgreen') #numeric
+```
+
+In histrogram of SurfaceAera, there are some gaps in data distribution. So, data is explored more by plotting histogram with different range.
+
+```{r}
+hist(energyData$SurfaceArea,breaks = seq(500, 850, by = 30),col = 'lightgreen') #numeric
+hist(energyData$SurfaceArea,breaks = seq(500, 850, by = 40),col = 'lightgreen') #numeric
+```
+
+Some gaps are disappeared when the bucket-size is 30 and all the gaps are disappeared when the bucket-size is 40. We can say that the gaps are quite small.
+```{r}
+hist(energyData$WallArea,col = 'lightgreen') #numeric
+```
+
+There are some gaps in WallArea histogram also. But the gaps are disappeared when we use bucket-size 40. So, they are quite small and we can assume the data as continuous value.
+
+```{r}
+hist(energyData$WallArea,breaks = seq(200, 450, by = 40),col = 'lightgreen') 
+```
+
+```{r}
+hist(energyData$RoofArea,col = 'lightgreen') #numeric There is a big gap
+hist(energyData$Height,col = 'lightgreen') #category
+hist(energyData$Orientation,col = 'lightgreen') #category
+hist(energyData$GlazingArea,col = 'lightgreen') #category
+hist(energyData$GAreaDist,col = 'lightgreen') #category
+hist(energyData$HeatingLoad,col = 'lightgreen') #target
+hist(energyData$CoolingLoad,col = 'lightgreen') #target
+```
+
+In histogram of HeatingLoad and Cooling Load shows that they are continuous values.
+
+Our intuition about categorical values is confirmed by histogram. There are a lot of gaps and data is concentrated in certrain values in those histogram of RoofArea, Height, Orientation, GlazingArea and GAreaDist.
+
+These are the plots for categorical features.
+```{r}
+roofArea <- as.factor(energyData$RoofArea)
+barplot(table(roofArea), col = 'lightgreen')
+
+orientation <- as.factor(energyData$Orientation)
+barplot(table(orientation), col = 'lightgreen')
+
+gArea <- as.factor(energyData$GlazingArea)
+barplot(table(gArea), col = 'lightgreen')
+
+gAreaDist <- as.factor(energyData$GAreaDist)
+barplot(table(gAreaDist), col = 'lightgreen')
+
+height <- as.factor(energyData$Height)
+barplot(table(height), col = 'lightgreen')
+```
+
+In the graph of Orientation and Height, data is spread almost equally between different columns. In the graph of GAreaDist, data is also spread equally except for the first column.
+
+Boxplots of the features are as follows.
+```{r}
+boxplot(energyData$Compactness, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$SurfaceArea, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$WallArea, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$RoofArea, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$Height, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$Orientation, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$GlazingArea, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$GAreaDist, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$HeatingLoad, horizontal = TRUE, col = 'steelblue')
+boxplot(energyData$CoolingLoad, horizontal = TRUE, col = 'steelblue')
+```
+
+The plots of features which have categorical values look weired but the rest seems normal.
+
+Correlation between features and targets are as follows.
+```{r}
+cor(energyData)
+library(corrplot)
+corrplot.mixed(cor(energyData))
+```
+
+There is high correlation between Compactness and SurfaceArea, Compactness and RoofArea, Compactness and Height, Surface Area and RoofArea, SurfaceArea and Height and RoofArea and Height.
+
+Except from Orientation, GlazingArea and GAreaDist, the rest have correclation with target values HeatingLoad and CoolingLoad.
+
+Scattor plots between feature variables and targets are as follows.
+```{r}
+pairs(energyData, pch = 19, col = "blue")
+```
+
+There is a non-linear relationship between Compactness and SurfaceArea. HeatingLoad is directly proportional to the CoolingLoad.
+
+The following table summarizes the variables in the dataset. Fill in the blanks to complete the data description.
+
+| Variable | Description | Numeric / Categorical | 
+| -------- | ----------- | -------------------------- |
+| Compactness | Index of compactness ratio for the building | Numeric |
+| SurfaceArea | Surface area of the complete building | Numeric |
+| WallArea | Total surface area of the Walls of the building | Numeric |
+| RoofArea | Total surface area of the Roof(s) of the building | Category |
+| Height | Overall height of the building | Category |
+| Orientation | Orientation of the building in terms of direction | Category |
+| GlazingArea | Total area of Glazing around the building | Category |
+| GAreaDist | Distribution of the Glazing Area in the building | Category |
+| HeatingLoad | Total heating load required for the building | Numeric |
+| CoolingLoad | Total cooling load required for the building | Numeric |
+
+Heating Load is the amount of heat energy that would need to be *added* to a space to maintain the temperature in an acceptable range. Cooling Load is the amount of heat energy that would need to be *removed* from a space (cooling) to maintain the temperature in an acceptable range. Thus, it is important in Civil Engineering to estimate the Heating and Cooling Load of a building while designing/planning the structure.
+
+---
+## Model for HeatingLoad
+
+Building model for HeatingLoad will be started from here. Every variable is added into the model except CoolingLoad
+```{r}
+lmHeatFit1 <- lm(HeatingLoad ~ (.- CoolingLoad), data = energyData)
+summary(lmHeatFit1)
+```
+After that, RoofArea and Orientation are removed since they are not significant.
+```{r}
+lmHeatFit2 <- update(lmHeatFit1, ~ . - (RoofArea + Orientation), data = energyData)
+summary(lmHeatFit2)
+```
+F-statistic and Adjusted R squared are improved.Then, a non-linear term is added into the model.
+```{r}
+lmHeatFit3 <- update(lmHeatFit2, ~ . + SurfaceArea:Height, data = energyData)
+summary(lmHeatFit3)
+```
+All 3 values are improved. WallArea is removed since it is not significant.
+```{r}
+lmHeatFit4 <- update(lmHeatFit3, ~ . - WallArea, data = energyData)
+summary(lmHeatFit4)
+```
+F-statistic improved significantly. The model is plotted to see the condition of the model.
+```{r}
+plot(lmHeatFit4)
+```
+
+Then, outliers are removed from the data and model is trained by new cleaned data.
+```{r}
+cd <- cooks.distance(lmHeatFit4)
+energyData.clean <- energyData[abs(cd) < 4/nrow(energyData), ] #cleaning the outlier? That's it
+nrow(energyData.clean)
+formula(lmHeatFit4)
+lmHeatFit <- lm(formula(lmHeatFit4), data = energyData.clean)
+summary(lmHeatFit)
+```
+Final model for heatload is plotted.
+```{r}
+plot(lmHeatFit)
+```
+
+## Model for CoolingLoad
+Building model for CoolingLoad will be started form here. Every feature is added to the model except HeatingLoad.
+```{r}
+lmCoolFit1 <- lm(CoolingLoad ~ (.- HeatingLoad), data = energyData)
+summary(lmCoolFit1)
+```
+RoofArea is removed since it is not significant.
+```{r}
+lmCoolFit2 <- update(lmCoolFit1, ~ . - RoofArea, data = energyData)
+summary(lmCoolFit2)
+```
+Orientation & GAreaDist are removed since they are not significant.
+```{r}
+lmCoolFit3 <- update(lmCoolFit2, ~ . - (Orientation + GAreaDist), data = energyData)
+summary(lmCoolFit3)
+```
+F-statistic improved a lot but R-squared value droppped a little. Non-linear term is added to the model.
+```{r}
+lmCoolFit4 <- update(lmCoolFit3, ~ . + WallArea:SurfaceArea, data = energyData)
+summary(lmCoolFit4)
+```
+Although F-statisitic is dropped a little bit, R-squared and adjusted R-squared improved significantly.The model is plotted to check its condition.
+```{r}
+plot(lmCoolFit4)
+```
+
+Outliers are removed from data and model is trained by new cleaned data
+```{r}
+cd <- cooks.distance(lmCoolFit4)
+energyCoolData.clean <- energyData[abs(cd) < 4/nrow(energyData), ]
+nrow(energyCoolData.clean)
+formula(lmCoolFit4)
+lmCoolFit <- lm(formula(lmCoolFit4), data = energyCoolData.clean)
+summary(lmCoolFit)
+```
+Final model for CoolingLoad is plotted
+```{r}
+plot(lmCoolFit)
+```
+
+## Prediction
+Prediction Data is loaded from csv file.
+```{r}
+newData <- read.csv("assign1_EnergyPred.csv", header = TRUE)
+```
+### Prediction result for Heating Load
+```{r}
+Heatprediction <- predict(lmHeatFit, newdata = newData)
+Heatconfint <- predict(lmHeatFit, newdata = newData, interval = "confidence", level = 0.95)
+Heatpredint <- predict(lmHeatFit, newdata = newData, interval = "prediction", level = 0.95)
+Heatprediction
+Heatconfint #confidence lvl
+Heatpredint #prediction lvl
+```
+### Prediction result for Cooling Load
+```{r}
+CoolPrediction <- predict(lmCoolFit, newdata = newData)
+Coolconfint <- predict(lmCoolFit, newdata = newData, interval = "confidence", level = 0.95)
+Coolpredint <- predict(lmCoolFit, newdata = newData, interval = "prediction", level = 0.95)
+CoolPrediction
+Coolconfint #confidence lvl
+Coolpredint #prediction lvl
+```
+

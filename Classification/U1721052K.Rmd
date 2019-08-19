@@ -1,0 +1,427 @@
+---
+title: 'Cx4073 : Assignment 2'
+author: "Arkar Min"
+date: "U1721052K"
+output:
+  html_document:
+    highlight: tango
+    theme: paper
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+### Marketing Campaign of a Bank
+
+A certain Bank is conducting a marketing campaign to offer a specific *Term Deposit* to a large demography of targeted clients. The data provided in this exercise is related with direct marketing campaigns (phone calls) of the Bank. The classification goal is to predict if the targeted person will subscribe to the Term Deposit offered by the Bank. The Bank also wants to identify the top three variables that may affect the subscription chances of the targeted person, and they also want to know how to increase the chances for the person to subscribe to the Term Deposit.
+
+---
+
+### Analysis of Marketing Data
+
+Import the CSV data file `assign2_MarketingData.csv` for analysis, and quickly check the structure of the data.
+
+```{r}
+marketData <- read.csv("assign2_MarketingData.csv", header = TRUE)
+str(marketData)
+```
+
+The following table summarizes the variables in the dataset. Check the data description carefully.
+
+| Variable | Description | Type |
+| ----------- | ------------------------------------------- | ------------ |
+| Age | Age of the person | Personal Profile |
+| Job | Job Profile of the person | Personal Profile |
+| Marital | Marital Status of the person | Personal Profile |
+| Education	| Highest Educational Qualification of the person | Personal Profile |
+| Default | Does the person have Credit in Default? | Financial Profile |
+| Housing	| Does the person have a Housing Loan? | Financial Profile |
+| Loan | Does the person have a Personal Loan? | Financial Profile |
+| Contact | Type of Contact Number for Communication | Personal Profile |
+| Month | Month of Year for the last contact with the person | Campaign Data |
+| Day | Day of Week for the last contact with the person | Campaign Data |
+| Duration | The duration of contact during the Last Contact | Campaign Data |
+| Campaign | Number of contacts with the person during this Campaign | Campaign Data | 
+| PrevDays | Number of days from the last contact during the Previous Campaign | Campaign Data |
+| Previous | Number of contacts with the person before this Campaign | Campaign Data | 
+| PrevOutcome | Outcome of previous Marketing Campaign for the person | Campaign Data | 
+| EmpVarRate | Employment Variation Rate in the person's locality | Demographic Info |
+| ConPriceIndex | Consumer Price Index (monthly) in the person's locality  | Demographic Info |
+| ConConfIndex | Consumer Confidence Index (monthly) in the person's locality | Demographic Info |
+| EuriborRate | Euro Interbank Offered Rate (Euribor) for 3 months | Demographic Info |
+| NumEmp | Number of Employees (quarterly) in the person's locality | Demographic Info |
+| Subscribed | Whether the person has Subscribed to a Term Deposit | Response/Target |
+
+Value `unknown` in any categorical variable means the data is not available. `Duration = 0` means no communication during the last contact, or may be that there was *no* previous contact at all. `PrevDays = 999` means there was no previous contact with the person. The goal is to predict the response variable `Subscribed` for each person -- that is, whether a person would subscribe to the *Term Deposit* being sold by the Bank.
+
+---
+
+#### Problem 1
+
+Build an optimal tree-based classification model for `Subscribed` vs the **Personal Profile** and **Financial Profile** of a person. Check the relevant accuracy parameters of your model, and use it to predict `Subscribed` in the `assign2_MarketingPred.csv`. 
+
+* Identify the top three important variables in this case. 
+* Why are these important? Justify in terms of the Business.
+* How would you influence `Subscribed` using these variables?
+
+
+#### Problem 2
+
+Build an optimal tree-based classification model for `Subscribed` vs **Personal Profile**, **Financial Profile**, and **Campaign Data** corresponding to a person. Check the relevant accuracy parameters of your model, and use it to predict `Subscribed` in the `assign2_MarketingPred.csv`. 
+
+* Identify the top three important variables in this case. 
+* Why are these important? Justify in terms of the Business.
+* How would you influence `Subscribed` using these variables?
+
+
+#### Problem 3
+
+Build an optimal tree-based classification model for `Subscribed` vs all variables, **Personal Profile**, **Financial Profile**, **Campaign Data**, **Demographic Info** corresponding to a person. Check the relevant accuracy parameters of your model, and use it to predict `Subscribed` in the `assign2_MarketingPred.csv`. 
+
+* Identify the top three important variables in this case. 
+* Why are these important? Justify in terms of the Business.
+* How would you influence `Subscribed` using these variables?
+
+
+---
+
+##Solution
+
+```{r}
+marketData <- read.csv("assign2_MarketingData.csv", header = TRUE)
+predData <- read.csv('assign2_MarketingPred.csv', header = TRUE)
+```
+
+### Basic Data Exploration
+
+```{r}
+# Basic exploration
+dim(marketData)      # dimension of the dataset
+names(marketData)    # labels of the columns/variables
+str(marketData)      # structure of the dataset
+head(marketData)     # first few (6) rows of the data
+tail(marketData)     # last few (6) rows of the data
+```
+
+There are total of 30,000 data and 21 types of variables. Age, Duration, Campaign, PrevDays, Previous, EmpVarRate, ConPriceIndex, ConConfIndex, EuriborRate, NumEmp looks like they have continuous values but need to plot graph to confirm that. For now, 10 features out of 20 (Since Subscribed is a target) clearly have categorical values.
+
+```{r}
+summary(marketData)  # summary statistics for all variables
+```
+
+Age having maximumn age of 98 is interesting. Wouldn't they be too old to target? Total unknown values of Housing and Loan are similiar. The difference between Maximum value and 3rd quadrant values of Duration and Campaign is too big. Campaign, PrevDays, Previous are suspected to be categorical values.
+
+Another interesting fact is (Other) type in features that has categorical value. Seems like R put types that have small value compared to the rest in the (Other) type. For Example, first row of Job is self-employment but it is not mentioned in the Summary Data of Job.
+
+Let see the histogram of suspected categorical value.
+
+```{r}
+hist(marketData$Campaign,col='lightgreen')
+hist(marketData$PrevDays,col='lightgreen')
+hist(marketData$Previous,col='lightgreen')
+
+campaign <- as.factor(marketData$Campaign)
+barplot(table(campaign), col = 'lightgreen')
+
+prevdays <- as.factor(marketData$PrevDays)
+barplot(table(prevdays), col = 'lightgreen')
+
+previous <- as.factor(marketData$Previous)
+barplot(table(previous), col = 'lightgreen')
+```
+
+It is hard to say Campaign as categorical value but there is high density of data in the early stage of data then the rest. It is the same for previous day. There are high density of data at 999.
+
+For previous, we can say it is a categorical value. Data is spread across 0 to 6. Though there is a high density of data at 0.
+
+So, based on the early exploration, we can say that there are 11 categorical features and 9 continuous features.
+
+Let see how Subscribed looks like in plot.
+
+```{r}
+plot(marketData$Subscribed) 
+```
+
+Data is unbalanced. There are a lot of data in "no"" values compared to "yes". That can cerate a huge bias in the model.
+
+Now, the relation between those features against target value. Features that have categorical value will be plotted first.
+
+```{r}
+mosaicplot(table(marketData$Job, marketData$Subscribed), main="", ylab="Subscribed", xlab="Job") #matter a lot
+mosaicplot(table(marketData$Marital, marketData$Subscribed), main="", ylab="Subscribed", xlab="Marital") #does not matter
+mosaicplot(table(marketData$Education, marketData$Subscribed), main="", ylab="Subscribed", xlab="Education") #no
+mosaicplot(table(marketData$Default, marketData$Subscribed), main="", ylab="Subscribed", xlab="Default") #yes. a bit
+mosaicplot(table(marketData$Housing, marketData$Subscribed), main="", ylab="Subscribed", xlab="Housing") #no
+mosaicplot(table(marketData$Loan, marketData$Subscribed), main="", ylab="Subscribed", xlab="Loan") #no
+mosaicplot(table(marketData$Contact, marketData$Subscribed), main="", ylab="Subscribed", xlab="Contact") #yes a bit
+mosaicplot(table(marketData$Month, marketData$Subscribed), main="", ylab="Subscribed", xlab="Month") #yes a lot
+mosaicplot(table(marketData$Day, marketData$Subscribed), main="", ylab="Subscribed", xlab="Day") #no
+mosaicplot(table(marketData$PrevOutcome, marketData$Subscribed), main="", ylab="Subscribed", xlab="PrevOutcome") #yes
+mosaicplot(table(marketData$Previous, marketData$Subscribed), main="", ylab="Subscribed", xlab="Previous") #yes a lot
+```
+
+Based on the plot, Job, Month, Previous will have great effect on target value. Default, Contact, PrevOutcome may have some effect but a lot of non-existent value in PrevOutcome creates some concern. Marital, Education, Hosuing, Loan, Day does not matter.
+
+Now, let plot the graph for continuous features.
+
+```{r}
+boxplot(Age ~ Subscribed, data=marketData,xlab="Subscribed", ylab="Age", pch = 19)
+boxplot(Duration~Subscribed,data=marketData, xlab="Subscribed", ylab="Duration", pch = 19) # yes
+boxplot(Campaign~Subscribed,data=marketData, xlab="Subscribed", ylab="Campaign", pch = 19) #yes
+boxplot(PrevDays~Subscribed,data=marketData, xlab="Subscribed", ylab="PrevDays", pch = 19) #no weired graph
+boxplot(EmpVarRate~Subscribed,data=marketData, xlab="Subscribed", ylab="EmpVarRate", pch = 19) #no
+boxplot(ConPriceIndex~Subscribed,data=marketData, xlab="Subscribed", ylab="ConPriceIndex", pch = 19) #no
+boxplot(ConConfIndex~Subscribed,data=marketData, xlab="Subscribed", ylab="ConConfIndex", pch = 19) # a little bit
+boxplot(EuriborRate~Subscribed,data=marketData, xlab="Subscribed", ylab="EuriborRate", pch = 19) # no
+boxplot(NumEmp~Subscribed,data=marketData, xlab="Subscribed", ylab="NumEmp", pch = 19) # no
+```
+
+Based on the plot, Duration, Campaign have good effect on target value. ConConfIndex has a little bit effect. The rest have no effect on the target value.
+
+**To conclude, Job, Month, Previous, Default, Contact, PrevOutcome, Duration and Campaign are important features affecting Subscribed.**
+
+### Data Sampling
+
+There is an high imbalance in original marketData. So, ROSE is used to rescale the data in order to avoid bias.
+
+```{r}
+library(ROSE)
+newData <- ROSE(Subscribed~.,data=marketData)$data #With ROSE
+plot(newData$Subscribed)
+
+summary(marketData$Subscribed)
+summary(newData$Subscribed)
+```
+
+Initially, there are over 26,000 of Nos and 3,397 of Yess. After ROSE sampling, both "yes" and "no" have around 15,000 elements.
+
+Now, marketData is splited into train and test set by using 80:20 rule.
+
+```{r}
+train <- sample(nrow(newData), 0.8*nrow(newData), replace = FALSE)
+marketTrain <- newData[train,]
+marketValid <- newData[-train,]
+summary(marketTrain)
+summary(marketValid)
+```
+
+Both training and validation sets have nearly equal number of "yes" and "no". Therefore, data is well prepared to start training.
+
+### Decision Tree with Personal Profile and Financial Profile
+
+Simple Decision Tree is made to observe which variables are important.
+
+```{r}
+library("tree")
+library(randomForest)
+
+
+treeFit <- tree(Subscribed ~ Age+Job+Marital+Education+Default+Housing+Loan+Contact, data = marketTrain)
+plot(treeFit)
+text(treeFit, pretty = FALSE)
+summary(treeFit)
+treeFit
+
+predTrain <- predict(treeFit, marketTrain, type = "class")  # prediction on train set
+mean(predTrain == marketTrain$Subscribed)                       # classification accuracy
+predValid <- predict(treeFit, marketValid, type = "class")  # prediction on validation set
+mean(predValid == marketValid$Subscribed)                       # classification accuracy
+```
+
+"Contact","Default" "Job" are the only variables used in decision tree, which means they are important variables.
+
+It's classification accuracy in both test set and validation set is observed to be quite low.
+
+Then, optimised random forest is used to get the best possible model. It is observed that choosing 3 as variable for split will give the optimal result.
+
+```{r}
+trials <- 8               # Number of trials for mtry
+nTree <- 500              # Fixing the value of ntree
+
+oobError <- double(trials)
+for (mt in 1:trials) {
+  rfFit <- randomForest(Subscribed ~ Age+Job+Marital+Education+Default+Housing+Loan+Contact, data = marketTrain, ntree = nTree, mtry = mt)
+  oobError[mt] <- rfFit$err.rate[nTree,1]   # OOB MSE after fitting all trees
+  cat("Experiment completed with mtry = ", mt, "\n")
+}
+plot(1:trials, oobError, pch=19, type="b",
+     xlab = "Value of mtry", ylab = "Out-Of-Bag Error")
+
+
+
+rfFit <- randomForest(Subscribed ~ Age+Job+Marital+Education+Default+Housing+Loan+Contact, data = marketTrain, 
+                      ntree = 500, mtry = 3,
+                      na.action = na.action(marketTrain),
+                      importance = TRUE)                
+rfFit
+predTrain <- predict(rfFit, marketTrain, type = "class")  # prediction on train set
+mean(predTrain == marketTrain$Subscribed)                       # classification accuracy
+predValid <- predict(rfFit, marketValid, type = "class")  # prediction on validation set
+mean(predValid == marketValid$Subscribed)  
+
+importance(rfFit)        # importance of the variables in the model (values)
+varImpPlot(rfFit)        # importance of the variables in the model (visual)
+```
+
+So, based on the result, Contact, Default and Job are three most important features for Personal+Financial. It is also matched with our initial intuition and single tree result. Prediction accuracy is around 78% in both training set and 70% in validation set.
+
+Based on the tree, we should target those people who has cellular phone since they are more likely to subscribe. We can target person with any type of jobs if we know exactly whether they have credit in default or not.
+
+These are the predictions made by using this model. In prediction data, Education and Default does not have same number of categorical types as in training data. So, we need to balance it before doing prediction
+
+There is a difference in level in prediction data compared to old data. So, we need to do some leveling before we can do prediction.
+
+```{r}
+str(predData)
+str(newData)
+
+levels(predData$Education) <- levels(marketTrain$Education)
+levels(predData$Default) <- levels(marketTrain$Default)
+prediction <- predict(rfFit,predData,type="class")
+summary(prediction)
+```
+
+### Decision Tree with Personal Profile, Finanical Profile and Campaign Data
+
+All the Prcedure are same as the first model except for the fact that this model has more features than the first one.
+
+Simple Decision Tree is made to observe which variables are important
+
+```{r}
+treeFit <- tree(Subscribed ~ Age+Job+Marital+Education+Default+Housing+Loan+Contact+Month+Day+Duration+Campaign+PrevDays+Previous+PrevOutcome, data = marketTrain)
+plot(treeFit)
+text(treeFit, pretty = FALSE)
+summary(treeFit)
+treeFit
+
+predTrain <- predict(treeFit, marketTrain, type = "class")  # prediction on train set
+mean(predTrain == marketTrain$Subscribed)                       # classification accuracy
+predValid <- predict(treeFit, marketValid, type = "class")  # prediction on validation set
+mean(predValid == marketValid$Subscribed)                       # classification accuracy
+```
+
+"PrevDays","Duration","Month","Previous" are the only variables used in decision tree, which means they are important variables. It is observed that previous important features Contact, Default and Job are not important compared to new additional features.
+
+It's classification accuracy in both test set and validation set becomes higher than pervious optimal random forest which means that Campaign data is more important that personal and finanical data.
+
+Then, optimised random forest is used to get the best possible model. It is observed that choosing 2 as variable for split will give the optimal result.
+
+```{r}
+trials <- 15               # Number of trials for mtry
+nTree <- 500              # Fixing the value of ntree
+
+oobError <- double(trials)
+for (mt in 1:trials) {
+  rfFit <- randomForest(Subscribed ~ Age+Job+Marital+Education+Default+Housing+Loan+Contact+Month+Day+Duration+Campaign+PrevDays+Previous+PrevOutcome, data = marketTrain, ntree = nTree, mtry = mt)
+  oobError[mt] <- rfFit$err.rate[nTree,1]   # OOB MSE after fitting all trees
+  cat("Experiment completed with mtry = ", mt, "\n")
+}
+plot(1:trials, oobError, pch=19, type="b",
+     xlab = "Value of mtry", ylab = "Out-Of-Bag Error")
+
+
+
+rfFit <- randomForest(Subscribed ~ Age+Job+Marital+Education+Default+Housing+Loan+Contact+Month+Day+Duration+Campaign+PrevDays+Previous+PrevOutcome, data = marketTrain, 
+                      ntree = 500, mtry = 2,
+                      na.action = na.action(marketTrain),
+                      importance = TRUE)                
+rfFit
+
+predTrain <- predict(rfFit, marketTrain, type = "class")  # prediction on train set
+mean(predTrain == marketTrain$Subscribed)                       # classification accuracy
+predValid <- predict(rfFit, marketValid, type = "class")  # prediction on validation set
+mean(predValid == marketValid$Subscribed)  
+
+importance(rfFit)        # importance of the variables in the model (values)
+varImpPlot(rfFit)        # importance of the variables in the model (visual)
+```
+
+According to this model, Duration, PrevDays and Month are three most important features. Prediction accuracy is improved a lot closing to 0.99 in training set and 0.92 in validation set.
+
+It is observed that people are more likely to subscribe if they are engaged before campaign and engaged again during campaign period.The longer the engagement duration, the more likely people will subscribe the service.
+
+These are the predictions made by using this model.
+
+```{r}
+prediction <- predict(rfFit,predData,type="class")
+summary(prediction)
+```
+
+### Decision Tree with Personal Profile, Finanical Profile, Campaign Data and Demographic Info
+
+For this model, all the avaliable features are used.
+
+Simple Decision Tree is made to observe which variables are important.
+
+```{r}
+treeFit <- tree(Subscribed ~ ., data = marketTrain)
+plot(treeFit)
+text(treeFit, pretty = FALSE)
+summary(treeFit)
+treeFit
+
+predTrain <- predict(treeFit, marketTrain, type = "class")  # prediction on train set
+mean(predTrain == marketTrain$Subscribed)                       # classification accuracy
+predValid <- predict(treeFit, marketValid, type = "class")  # prediction on validation set
+mean(predValid == marketValid$Subscribed)                       # classification accuracy
+```
+
+"PrevDays","Duration","EuriborRate","Month" were used in simple decision tree. Only one feature becomes important amog all five important features. 
+
+Classification accuracy is a little bit more than the previous one in both training and validation sets.
+
+Then, optimised random forest is used to get the best possible model. It is observed that choosing 3 as variable for split will give the optimal result.
+
+```{r}
+trials <- 20              # Number of trials for mtry
+nTree <- 500              # Fixing the value of ntree
+
+oobError <- double(trials)
+for (mt in 1:trials) {
+  rfFit <- randomForest(Subscribed ~ ., data = marketTrain, ntree = nTree, mtry = mt)
+  oobError[mt] <- rfFit$err.rate[nTree,1]   # OOB MSE after fitting all trees
+  cat("Experiment completed with mtry = ", mt, "\n")
+}
+plot(1:trials, oobError, pch=19, type="b",
+     xlab = "Value of mtry", ylab = "Out-Of-Bag Error")
+
+
+
+rfFit <- randomForest(Subscribed ~ ., data = marketTrain, 
+                      ntree = 500, mtry = 3,
+                      na.action = na.action(marketTrain),
+                      importance = TRUE)                
+rfFit
+
+predTrain <- predict(rfFit, marketTrain, type = "class")  # prediction on train set
+mean(predTrain == marketTrain$Subscribed)                       # classification accuracy
+predValid <- predict(rfFit, marketValid, type = "class")  # prediction on validation set
+mean(predValid == marketValid$Subscribed)  
+
+importance(rfFit)        # importance of the variables in the model (values)
+varImpPlot(rfFit)        # importance of the variables in the model (visual)
+```
+Still, Duration, PrevDays and Month are important features.
+
+Classification accuracy is a little bit more than as the previous model.
+
+These are the predictions made by using this model.
+
+```{r}
+prediction <- predict(rfFit,predData,type="class")
+summary(prediction)
+```
+
+### Conclusion
+
+Decision tree's classification accuracy increses dramatically when features of campaign datas are added.
+
+It is also observed that if we can engage people whom we have engaged before during campaign period, Subscription rate is likely to be increased.
+
+So, bank should engage as many people as it can. Even if, it does not show any effect in short term, it could give long term benefit.
+
